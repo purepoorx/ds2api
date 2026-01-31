@@ -11,8 +11,12 @@ export default function ApiTester({ config, onMessage }) {
     const [model, setModel] = useState('deepseek-chat')
     const [message, setMessage] = useState('你好，请用一句话介绍你自己。')
     const [apiKey, setApiKey] = useState('')
+    const [selectedAccount, setSelectedAccount] = useState('')  // 空为随机
     const [response, setResponse] = useState(null)
     const [loading, setLoading] = useState(false)
+
+    // 获取账号列表
+    const accounts = config.accounts || []
 
     const testApi = async () => {
         setLoading(true)
@@ -84,6 +88,48 @@ export default function ApiTester({ config, onMessage }) {
         }
     }
 
+    // 智能测试：根据是否选择账号决定测试方式
+    const sendTest = async () => {
+        setLoading(true)
+        setResponse(null)
+
+        // 如果选择了指定账号，使用账号测试接口
+        if (selectedAccount) {
+            try {
+                const res = await fetch('/admin/accounts/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        identifier: selectedAccount,
+                        model,
+                        message,
+                    }),
+                })
+                const data = await res.json()
+                setResponse({
+                    success: data.success,
+                    status_code: res.status,
+                    response: data,
+                    account: selectedAccount,
+                })
+                if (data.success) {
+                    onMessage('success', `${selectedAccount}: 测试成功 (${data.response_time}ms)`)
+                } else {
+                    onMessage('error', `${selectedAccount}: ${data.message}`)
+                }
+            } catch (e) {
+                onMessage('error', '网络错误: ' + e.message)
+                setResponse({ error: e.message })
+            } finally {
+                setLoading(false)
+            }
+            return
+        }
+
+        // 随机账号：使用标准 API
+        directTest()
+    }
+
     return (
         <div className="section">
             <div className="card">
@@ -99,6 +145,21 @@ export default function ApiTester({ config, onMessage }) {
                         {MODELS.map(m => (
                             <option key={m.id} value={m.id}>{m.name}</option>
                         ))}
+                    </select>
+                </div>
+
+                <div className="form-group">
+                    <label className="form-label">账号（指定测试哪个账号）</label>
+                    <select
+                        className="form-input"
+                        value={selectedAccount}
+                        onChange={e => setSelectedAccount(e.target.value)}
+                    >
+                        <option value="">🎲 随机选择</option>
+                        {accounts.map((acc, i) => {
+                            const id = acc.email || acc.mobile
+                            return <option key={i} value={id}>{id} {acc.has_token ? '✅' : '⚠️'}</option>
+                        })}
                     </select>
                 </div>
 
@@ -124,8 +185,9 @@ export default function ApiTester({ config, onMessage }) {
                 </div>
 
                 <div className="btn-group">
-                    <button className="btn btn-primary" onClick={directTest} disabled={loading}>
-                        {loading ? <span className="loading"></span> : '🚀 发送请求'}
+                    <button className="btn btn-primary" onClick={sendTest} disabled={loading}>
+                        {loading ? <span className="loading"></span> :
+                            selectedAccount ? `🚀 使用 ${selectedAccount} 发送` : '🚀 发送请求'}
                     </button>
                 </div>
             </div>
@@ -152,6 +214,21 @@ export default function ApiTester({ config, onMessage }) {
                                 whiteSpace: 'pre-wrap'
                             }}>
                                 {response.response.choices[0].message.content}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 指定账号测试的回复 */}
+                    {response.success && response.response?.reply && (
+                        <div style={{ marginTop: '1rem' }}>
+                            <div className="form-label">AI 回复 ({response.account})：</div>
+                            <div style={{
+                                padding: '1rem',
+                                background: 'var(--bg-tertiary)',
+                                borderRadius: 'var(--radius)',
+                                whiteSpace: 'pre-wrap'
+                            }}>
+                                {response.response.reply}
                             </div>
                         </div>
                     )}

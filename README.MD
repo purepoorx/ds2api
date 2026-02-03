@@ -4,6 +4,7 @@
 ![Stars](https://img.shields.io/github/stars/CJackHwang/ds2api.svg)
 ![Forks](https://img.shields.io/github/forks/CJackHwang/ds2api.svg)
 [![Version](https://img.shields.io/badge/version-1.6.11-blue.svg)](version.txt)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](DEPLOY.md#docker-部署推荐)
 
 将 DeepSeek 免费对话版转换为 **OpenAI & Claude 兼容 API**，支持多账号轮询、自动 Token 刷新、可视化管理界面。
 
@@ -192,16 +193,25 @@ location / {
 }
 ```
 
-### Docker 部署（可选）
+### 方式三：Docker 部署
 
 ```bash
-# 使用环境变量配置
-docker run -d \
-  -p 5001:5001 \
-  -e DS2API_ADMIN_KEY=your-admin-key \
-  -e DS2API_CONFIG_JSON='{"keys":["api-key"],"accounts":[...]}' \
-  ds2api
+# 1. 克隆仓库并进入目录
+git clone https://github.com/CJackHwang/ds2api.git
+cd ds2api
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env，填写 DS2API_ADMIN_KEY 和 DS2API_CONFIG_JSON
+
+# 3. 启动服务
+docker-compose up -d
+
+# 4. 查看日志
+docker-compose logs -f
 ```
+
+> **Docker 优势**：零侵入设计，主代码更新只需 `docker-compose up -d --build`，无需修改 Docker 配置。详见 [DEPLOY.md](DEPLOY.md#docker-部署推荐)。
 
 ## ⚠️ 免责声明
 

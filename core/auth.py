@@ -58,17 +58,35 @@ def get_queue_status() -> dict:
 # ----------------------------------------------------------------------
 # 账号选择与释放 - 轮询(Round-Robin)策略
 # ----------------------------------------------------------------------
-def choose_new_account(exclude_ids=None):
+def choose_new_account(exclude_ids=None, target_id=None):
     """轮询选择策略：
     1. 使用线程锁保证并发安全
-    2. 优先选择队首的有 token 账号
-    3. 从队列头部取出账号（FIFO）
-    4. 请求完成后调用 release_account 将账号放回队尾
+    2. 如果指定了 target_id，优先尝试获取该账号
+    3. 优先选择队首的有 token 账号
+    4. 从队列头部取出账号（FIFO）
+    5. 请求完成后调用 release_account 将账号放回队尾
     """
     if exclude_ids is None:
         exclude_ids = []
 
     with _queue_lock:
+        # 0. 如果指定了目标账号，优先尝试获取
+        if target_id:
+            for i in range(len(account_queue)):
+                acc = account_queue[i]
+                acc_id = get_account_identifier(acc)
+                if acc_id == target_id:
+                    selected = account_queue.pop(i)
+                    in_use_accounts[acc_id] = selected
+                    logger.info(f"[choose_new_account] 指定选择: {acc_id} | 队列剩余: {len(account_queue)}")
+                    return selected
+            # 如果队列中没找到，且不在 in_use 中，说明账号不存在
+            if target_id not in in_use_accounts:
+                logger.warning(f"[choose_new_account] 指定账号不存在: {target_id}")
+            else:
+                logger.warning(f"[choose_new_account] 指定账号正忙: {target_id}")
+            return None
+
         # 第一轮：优先选择已有 token 的账号
         for i in range(len(account_queue)):
             acc = account_queue[i]
@@ -145,11 +163,17 @@ def determine_mode_and_token(request: Request):
     if caller_key in config_keys:
         request.state.use_config_token = True
         request.state.tried_accounts = []  # 初始化已尝试账号
-        selected_account = choose_new_account()
+        
+        target_account = request.headers.get("X-Ds2-Target-Account")
+        selected_account = choose_new_account(target_id=target_account)
+        
         if not selected_account:
+            detail_msg = "No accounts configured or all accounts are busy."
+            if target_account:
+                detail_msg = f"Target account {target_account} is busy or not found."
             raise HTTPException(
                 status_code=429,
-                detail="No accounts configured or all accounts are busy.",
+                detail=detail_msg,
             )
         if not selected_account.get("token", "").strip():
             try:
